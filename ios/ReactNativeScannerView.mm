@@ -21,6 +21,7 @@ using namespace facebook::react;
     AVCaptureDeviceInput *_input;
     AVCaptureMetadataOutput *_output;
     AVCaptureVideoPreviewLayer *_prevLayer;
+    dispatch_queue_t _sessionQueue;
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider
@@ -49,6 +50,7 @@ using namespace facebook::react;
     }
 
     _output = [[AVCaptureMetadataOutput alloc] init];
+
     [_output setMetadataObjectsDelegate:self queue:dispatch_get_main_queue()];
     [_session addOutput:_output];
 
@@ -60,13 +62,7 @@ using namespace facebook::react;
        [_view.layer addSublayer:_prevLayer];
       
     // Create a dispatch queue.
-    dispatch_queue_t sessionQueue = dispatch_queue_create("session queue", DISPATCH_QUEUE_SERIAL);
-
-    // Use dispatch_async to call the startRunning method on the sessionQueue.
-    dispatch_async(sessionQueue, ^{
-        [self->_session startRunning];
-    });
-
+    _sessionQueue = dispatch_queue_create("session queue", DISPATCH_QUEUE_SERIAL);
     self.contentView = _view;
   }
 
@@ -108,13 +104,6 @@ using namespace facebook::react;
     if (_session != nil) {
       // Stop the session
       [_session stopRunning];
-
-      // Release the session, input, output, and preview layer
-      _session = nil;
-      _input = nil;
-      _output = nil;
-      _prevLayer = nil;
-        
     }
 }
 
@@ -147,11 +136,22 @@ using namespace facebook::react;
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
 {
     [super updateProps:props oldProps:oldProps];
+    dispatch_async(_sessionQueue, ^{
+        [self->_session startRunning];
+    });
 }
 
 - (void)updateLayoutMetrics:(const facebook::react::LayoutMetrics &)layoutMetrics oldLayoutMetrics:(const facebook::react::LayoutMetrics &)oldLayoutMetrics{
   [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics];
   _prevLayer.frame = [_view.layer bounds];
+}
+
+- (void)prepareForRecycle {
+    [super prepareForRecycle];
+    
+    dispatch_async(_sessionQueue, ^{
+        [self->_session stopRunning];
+    });
 }
 
 - (void)handleCommand:(nonnull const NSString *)commandName args:(nonnull const NSArray *)args {
